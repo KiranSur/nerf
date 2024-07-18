@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<head>
+    <title>NeRF Implementation</title>
+</head>
+<style>
+  .container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  figure {
+    display: table;
+    margin-left: 5px;
+    margin-right: 5px;
+  }
+
+  .blend-figure {
+    display: table;
+    margin-left: 2px;
+    margin-right: 2px;
+    margin-bottom: 2px;
+    margin-top: 2px
+  }
+  
+  img {
+    max-height: 250px;
+    max-width: 250px;
+    display: block;
+    border: 2px solid black
+  }
+
+  .gif_img {
+    max-height: 300px;
+    max-width: 300px;
+    display: block;
+    border: 2px solid black
+  }
+
+  .img-big {
+    max-height: 500px;
+    max-width: 500px;
+    display: block;
+    border: 2px solid black
+  }
+
+  .img-med {
+    max-height: 300px;
+    max-width: 300px;
+    display: block;
+    border: 2px solid black
+  }
+
+  .formula-img {
+    max-width: 500px;
+    max-height: 500px;
+    display: block;
+    margin-bottom: 10px
+  }
+
+  .diagram-img {
+    max-width: 1000px;
+    display: block;
+    margin-bottom: 10px
+  }
+
+  .conclusion {
+    margin-bottom: 100px
+  }
+  
+  figcaption {
+    display: table-caption;
+    caption-side: bottom;
+    font-size: 15px;
+    text-align: center;
+    color: #606060
+  }
+
+  body {
+    padding-left: 15%;
+    padding-right: 15%
+  }
+
+  p {
+    color: #606060
+  }
+
+  h1 {
+    padding-bottom: 20px;
+  }
+
+  h2 {
+    padding-top: 30px;
+  }
+
+  h3 {
+    padding-top: 20px;
+  }
+
+</style>
+
+<body style="font-family: Verdana; background-color: #f7f7f7">
+    <center>
+        <h1>Neural Radiance Fields!</h1>
+    </center>
+
+    <h2>Introduction</h2>
+
+    <p>
+        In this project we're going to be implementing Neural Radiance Fields... aka Nerfs!! At a high level, Nerfs will let us take images of a certain scene/object from many angles as input, then 
+        output a model that can take in some view coordinate/direction and output a novel view of our scene/object! This has a ton of uses ranging from creating meshes to rendering a 3d circling gif 
+        of an object.
+    </p>
+
+    <h2>Part 1: Fit a Neural Field to a 2D Image</h2>
+
+    <p>
+        The first part of this project involves training a model to recreate a 2D image given coordinate input. We want our model to take in some coordinate (x, y) then output the associated 
+        (r, g, b) values that should show up in the picture. This is a simplified version of the broader Nerf problem and will set up some of the work to be done later! To start with, we'll be 
+        working on recreating the following image of a fox:
+    </p>
+
+    <div class="container">
+         <figure class="image">
+            <img src="data/fox/fox.jpg" class="img-big">
+                <figcaption class="figcaption">Original Image</figcaption>
+         </figure>
+    </div>
+
+    <h3>Defining our Model</h3>
+
+    <p>
+        First, we need to define the Multi-Layer Perceptron (MLP) that we will be using to train our model. We'll be using the following layer structure with 4 linear layers, a ReLU between 
+        each one, and a sigmoid at the end to constrain our RGB output to [0, 1]. We'll also be encoding our input coordinates with a positional encoding ~ PE(x). This will allow us to overfit
+        to the actual coordinates of our picture which will give us very fine/detailed results!
+    </p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/mlp_p1.jpeg" class="formula-img">
+                <figcaption class="figcaption">MLP Layer by Layer</figcaption>
+         </figure>
+    </div>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/positional_encoding.png" class="formula-img">
+                <figcaption class="figcaption">Positional Encoding</figcaption>
+         </figure>
+    </div>
+
+    <h3>Tuning Hyperparameters</h3>
+
+    <p>
+        Now, we need to tune some of the hyperparameters for our model! To do this, we're going to train it while varying different values for our learning rate and  L (which is proportional to the 
+        added dimensionality in our positional encoding). We'll use PSNR (which is based on the mean squared error between two images) as a metric to check how close our reconstructed image is to 
+        the original.
+    </p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/psnr_formula.png" class="formula-img">
+                <figcaption class="figcaption">PSNR Formula</figcaption>
+         </figure>
+    </div>
+
+    <p>Varying these values, I got the following PSNR curves and found that the best hyperparameters were L=35 and lr=5e-3:</p>
+
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/fox/L_tuning.png" class="img-big">
+                <figcaption class="figcaption">PSNR by L</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/fox/lr_tuning.png" class="img-big">
+                <figcaption class="figcaption">PSNR by lr</figcaption>
+         </figure>
+    </div>
+    
+    <h3>Final Training</h3>
+
+    <p>Now that we have our final hyperparameters, let's train our final model! After training for 3000 iterations (batching 10k pixel coordinates per iteration) I got the following PSNR curve:</p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/fox/final_psnr_graph.png" class="img-big">
+                <figcaption class="figcaption">PSNR by Iteration | Final PSNR: 26.942</figcaption>
+         </figure>
+    </div>
+
+    <p>And here is how the image looked at various iterations in the training process! As you can see, the final result is very detailed and pretty darn close to the original image!</p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/fox/fox_1.jpg">
+                <figcaption class="figcaption">Iteration 1</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/fox/fox_100.jpg">
+                <figcaption class="figcaption">Iteration 100</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/fox/fox_500.jpg">
+                <figcaption class="figcaption">Iteration 500</figcaption>
+         </figure>
+    </div>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/fox/fox_1000.jpg">
+                <figcaption class="figcaption">Iteration 1000</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/fox/fox_2000.jpg">
+                <figcaption class="figcaption">Iteration 2000</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/fox/fox_3000.jpg">
+                <figcaption class="figcaption">Iteration 3000</figcaption>
+         </figure>
+    </div>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/fox/fox_3000.jpg" class="img-big">
+                <figcaption class="figcaption">Final Reconstructed Fox</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/fox/fox.jpg" class="img-big">
+                <figcaption class="figcaption">Original Image</figcaption>
+         </figure>
+    </div>
+
+    <h3>Reconstructing UP!</h3>
+
+    <p>Now let's do reconstruction on an image from the movie Up! Here, I used the same hyperparameters as before (L=35, lr=5e-3) and got the following results:</p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/up/final_psnr_graph.png" class="img-big">
+                <figcaption class="figcaption">PSNR by Iteration | Final PSNR: 25.038</figcaption>
+         </figure>
+    </div>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/up/up_1.jpg">
+                <figcaption class="figcaption">Iteration 1</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/up/up_100.jpg">
+                <figcaption class="figcaption">Iteration 100</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/up/up_500.jpg">
+                <figcaption class="figcaption">Iteration 500</figcaption>
+         </figure>
+    </div>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/up/up_1000.jpg">
+                <figcaption class="figcaption">Iteration 1000</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/up/up_2000.jpg">
+                <figcaption class="figcaption">Iteration 2000</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/up/up_3000.jpg">
+                <figcaption class="figcaption">Iteration 3000</figcaption>
+         </figure>
+    </div>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/up/up_3000.jpg" class="img-big">
+                <figcaption class="figcaption">Final Reconstruction</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/up/up.jpg" class="img-big">
+                <figcaption class="figcaption">Original Image</figcaption>
+         </figure>
+    </div>
+
+    <h2>Part 2: Fit a Neural Radiance Field From Multi-view Images</h2>
+
+    <p>
+        In this next part of the project, we're going to be implementing the full Nerf architecture to reconstruct a novel 3d view of a lego dump truck! Let's go step by step into how this was done.
+    </p>
+
+    <h3>Getting the Data</h3>
+
+    <p>
+        First, we need to create a dataloader that takes in the given camera extrinsics data and outputs the origin and direction for rays stemming from each camera in our dataset. To do this,
+        we first have to do a couple conversions using the C2W matrix (which converts some camera coordinates into world coordinates) and the intrinsic matrix K (which converts pixel coordinates into 
+        camera coordinates). This is an overall view of how those matrices fit together when converting coordinates between the pixel and world spaces (although the diagram is doing the inverse transformation 
+        in that it is going from world coordinates to pixel coordinates):
+    </p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/overall_transformation.png" class="img-big">
+                <figcaption class="figcaption">Overall Pixel to World Transformation (we go left to right)</figcaption>
+         </figure>
+    </div>
+
+    
+    <div class="container">
+        <figure class="image">
+            <img src="data/overall_transformation_matrices.png" class="img-big">
+                <figcaption class="figcaption">Inverses of matrices used (left is intrinsic matrix K, right is extrinsic matrix W2C). U, V are the X, Y coordinates in the pixel space.</figcaption>
+         </figure>
+    </div>
+
+    <p>
+        Once we are able to convert from pixel coordinates to world coordinates, we need to convert from world coordinates to rays. To do this, we have to get the ray origin (the location of our camera) 
+        and the ray direction (where our ray is shooting). To get this done, we use the following formulas:
+    </p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/r_o.png" class="img-big">
+                <figcaption class="figcaption">Ray Origin</figcaption>
+         </figure>
+    </div>
+
+    
+    <div class="container">
+        <figure class="image">
+            <img src="data/r_d.png" class="img-big">
+                <figcaption class="figcaption">Ray Direction</figcaption>
+         </figure>
+    </div>
+
+
+    <p>
+        Finally, after getting our rays, we need to sample along them. To do this, I just created a linear space along the length of the ray that samples points along it (with some perturbation 
+        during training). Our dataloader returns these rays and the samples along them for training/inference by our model. This is a cool visualization of a sample of 100 rays and the sampled points 
+        along them (along with the cameras used):
+    </p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/camera_visualization.png" class="img-big">
+                <figcaption class="figcaption">Cameras, Rays, and Samples!</figcaption>
+         </figure>
+    </div>
+
+    <h3>Defining our Model</h3>
+
+    <p>Now we need to define our model! We'll be using an MLP like in Part 1 but with a few additions. First, we'll positioanlly encode both of our inputs (3d coords and ray directions).
+        Our first input will be the 3d coordinate of our current sample along some ray. Over the course of the MLP, we 
+        will concatenate our original coordinates and our second input (the ray direction) into our layer output such that it won't "forget" those. This is a common technique for very deep models and is 
+        a great way to achieve stable results! Beyond these skip connections, we'll have our model branch out into two outputs in the end: An rgb output like before with has a final sigmoid activation to 
+        place it between [0, 1] and a density output which will be ReLU'd such that it is greater than 0. 
+    </p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/mlp_nerf.png" class="img-big">
+                <figcaption class="figcaption">Nerf MLP</figcaption>
+         </figure>
+    </div>
+
+    <h3>Rendering a Pixel</h3>
+
+    <p>
+        After getting our model output, we need to be able to render what pixel should be shown given the current viewing direction. To do that, we need the density and rgb output from our model along
+        each of the 64 samples on a ray. Then, we use the following tractable equation to solve for the pixel output depending on the density at each point along the ray and the predicted rgb values at 
+        that point on the ray:
+    </p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/volrend.png" class="img-big">
+                <figcaption class="figcaption">Volume Rendering Equation</figcaption>
+         </figure>
+    </div>
+
+    <p>The way we then get our loss is by using this volume rendering on our model output from all the samples on a ray, and comparing the outputted pixel values to our actual image's pixel values with MSE loss.</p>
+
+    <h3>Training our Final Nerf + Results!</h3>
+
+    <p>Now, after training our model with lr=5e-4, L_x=10, and L_rd=4 for 10k iterations... we get these results!</p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/lego/loss_curve.png" class="img-big">
+                <figcaption class="figcaption">Loss by Iterations | Final Loss: 0.0014</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/lego/psnr_curve.png" class="img-big">
+                <figcaption class="figcaption">PSNR by Iterations (on Validation Set) | Final PSNR: 27.086</figcaption>
+         </figure>
+    </div>
+
+    <p>Rendering of model output on first validation image over 10k iterations. It gets really good at the end!!</p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/lego/_0.jpg">
+                <figcaption class="figcaption">Iteration 0</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/lego/_200.jpg">
+                <figcaption class="figcaption">Iteration 200</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/lego/_500.jpg">
+                <figcaption class="figcaption">Iteration 500</figcaption>
+         </figure>
+    </div>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/lego/_1000.jpg">
+                <figcaption class="figcaption">Iteration 1000</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/lego/_5000.jpg">
+                <figcaption class="figcaption">Iteration 5000</figcaption>
+         </figure>
+         <figure class="image">
+            <img src="data/lego/_10000.jpg">
+                <figcaption class="figcaption">Iteration 10000</figcaption>
+         </figure>
+    </div>
+
+    <p>Now, let's use our model on the test set and generate a 3d circling gif around our lego dump truck! It's so crisp let's gooo.</p>
+
+    <div class="container">
+        <figure class="image">
+            <img src="data/lego/test_lego.gif" class="img-big">
+                <figcaption class="figcaption">Final GIF on Test Set!</figcaption>
+         </figure>
+    </div>
+
+    <h2>Conclusion</h2>
+
+    <p class="conclusion">
+        This project was really awesome. I've seen Nerfs in action a lot in recent years so it was a really fun experience implementing them from scratch and seeing how (at their core) they're pretty simple. 
+        There's definitely a lot of auxilliary code but at the end of the day they do boil down to a simple MLP which is a nice change of pace from the big fancy model architectures of the modern day like 
+        transformers.
+    </p>
+    
+</body>
